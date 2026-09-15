@@ -1,0 +1,5 @@
+# Python здесь ТОЛЬКО для загрузки данных из API в базу.
+# Никакого pandas: вся агрегация и расчёты — в SQL.
+requests==2.32.3
+psycopg[binary]==3.2.3
+python-dotenv==1.0.1

@@ -1,0 +1,55 @@
+# Локальный стенд витрины: PostgreSQL 16 (данные + аналитика) и Metabase (дашборд).
+# Metabase ходит в ту же базу, что и ETL, — отдельного хранилища для витрин нет,
+# вся аналитика живёт в SQL внутри Postgres.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: moex_pg
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-moex}
+      POSTGRES_USER: ${POSTGRES_USER:-moex}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-moex}
+      # Русские названия бумаг приходят в UTF-8; фиксируем локаль, чтобы
+      # сортировка ORDER BY shortname не зависела от настроек хост-машины.
+      LANG: ru_RU.UTF-8
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Файлы из этой папки Postgres выполняет по алфавиту ОДИН раз — при
+      # первой инициализации пустого тома. Поэтому весь DDL написан
+      # идемпотентно (IF NOT EXISTS) и его же можно прогнать повторно
+      # командой `make schema`, не пересоздавая том.
+      - ./sql/schema:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-moex} -d ${POSTGRES_DB:-moex}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  metabase:
+    image: metabase/metabase:v0.54.5
+    container_name: moex_metabase
+    ports:
+      - "${METABASE_PORT:-3000}:3000"
+    environment:
+      # Metabase хранит свои настройки (вопросы, дашборды, пользователей)
+      # в отдельной базе metabase_app того же сервера. Дефолтный вариант —
+      # встроенная H2 в файле — для локального стенда работает, но теряется
+      # при пересоздании контейнера и не переживает обновление версии.
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase_app
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${POSTGRES_USER:-moex}
+      MB_DB_PASS: ${POSTGRES_PASSWORD:-moex}
+      MB_DB_HOST: postgres
+      JAVA_TIMEZONE: Europe/Moscow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
