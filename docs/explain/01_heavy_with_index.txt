@@ -1,0 +1,54 @@
+Тяжёлый запрос (бета всех бумаг), С индексом quote_date_secid_idx
+=================================================================
+
+Запрос: sql/performance/heavy_query.sql
+Замер сделан на прогретом кэше (три прогона перед снятием плана).
+
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=3460.69..3460.81 rows=46 width=29) (actual time=67.433..67.437 rows=46 loops=1)
+   Sort Key: ((covar_samp((d.ret_d)::double precision, (r.ret_rynka)::double precision) / (NULLIF(var_samp(r.ret_rynka), '0'::numeric))::double precision)) DESC
+   Sort Method: quicksort  Memory: 27kB
+   Buffers: shared hit=533
+   ->  HashAggregate  (cost=3458.27..3459.42 rows=46 width=29) (actual time=67.331..67.404 rows=46 loops=1)
+         Group Key: d.secid
+         Batches: 1  Memory Usage: 80kB
+         Buffers: shared hit=530
+         ->  Hash Join  (cost=88.17..3350.65 rows=7175 width=69) (actual time=0.476..16.861 rows=19458 loops=1)
+               Hash Cond: (d.trade_date = r.trade_date)
+               Buffers: shared hit=530
+               ->  Subquery Scan on d  (cost=0.29..3093.46 rows=19511 width=41) (actual time=0.040..13.949 rows=19458 loops=1)
+                     Filter: (d.ret_d IS NOT NULL)
+                     Rows Removed by Filter: 46
+                     Buffers: shared hit=517
+                     ->  WindowAgg  (cost=0.29..2897.37 rows=19609 width=41) (actual time=0.037..12.424 rows=19504 loops=1)
+                           Buffers: shared hit=517
+                           ->  Index Scan using quote_pk on quote  (cost=0.29..2456.17 rows=19609 width=15) (actual time=0.029..3.374 rows=19504 loops=1)
+                                 Index Cond: (trade_date >= '2025-01-01'::date)
+                                 Buffers: shared hit=517
+               ->  Hash  (cost=82.46..82.46 rows=433 width=36) (actual time=0.427..0.428 rows=431 loops=1)
+                     Buckets: 1024  Batches: 1  Memory Usage: 30kB
+                     Buffers: shared hit=13
+                     ->  Subquery Scan on r  (cost=68.33..82.46 rows=433 width=36) (actual time=0.145..0.379 rows=431 loops=1)
+                           Filter: (r.ret_rynka IS NOT NULL)
+                           Rows Removed by Filter: 1
+                           Buffers: shared hit=13
+                           ->  WindowAgg  (cost=68.33..78.11 rows=435 width=36) (actual time=0.144..0.335 rows=432 loops=1)
+                                 Buffers: shared hit=13
+                                 ->  Sort  (cost=68.33..69.41 rows=435 width=10) (actual time=0.141..0.160 rows=432 loops=1)
+                                       Sort Key: index_quote.trade_date
+                                       Sort Method: quicksort  Memory: 41kB
+                                       Buffers: shared hit=13
+                                       ->  Bitmap Heap Scan on index_quote  (cost=16.74..49.26 rows=435 width=10) (actual time=0.041..0.079 rows=432 loops=1)
+                                             Recheck Cond: ((index_id = 'IMOEX'::text) AND (trade_date >= '2025-01-01'::date))
+                                             Heap Blocks: exact=6
+                                             Buffers: shared hit=10
+                                             ->  Bitmap Index Scan on index_quote_pk  (cost=0.00..16.63 rows=435 width=0) (actual time=0.036..0.036 rows=432 loops=1)
+                                                   Index Cond: ((index_id = 'IMOEX'::text) AND (trade_date >= '2025-01-01'::date))
+                                                   Buffers: shared hit=4
+ Planning:
+   Buffers: shared hit=182
+ Planning Time: 0.747 ms
+ Execution Time: 67.573 ms
+(44 rows)
+

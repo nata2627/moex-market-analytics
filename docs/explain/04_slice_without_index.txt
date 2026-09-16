@@ -1,0 +1,21 @@
+Срез рынка на дату, БЕЗ индекса
+===============================
+
+Запрос: sql/performance/slice_query.sql
+Замер сделан на прогретом кэше (три прогона перед снятием плана).
+
+                                                          QUERY PLAN                                                          
+------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=1166.50..1166.60 rows=40 width=25) (actual time=0.942..0.945 rows=46 loops=1)
+   Sort Key: value DESC
+   Sort Method: quicksort  Memory: 27kB
+   Buffers: shared hit=232
+   ->  Index Scan using quote_pk on quote q  (cost=0.29..1165.43 rows=40 width=25) (actual time=0.033..0.912 rows=46 loops=1)
+         Index Cond: (trade_date = '2026-09-14'::date)
+         Buffers: shared hit=229
+ Planning:
+   Buffers: shared hit=102
+ Planning Time: 0.366 ms
+ Execution Time: 0.985 ms
+(11 rows)
+

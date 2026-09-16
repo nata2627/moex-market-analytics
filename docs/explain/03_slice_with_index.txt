@@ -1,0 +1,25 @@
+Срез рынка на дату, С индексом quote_date_secid_idx
+===================================================
+
+Запрос: sql/performance/slice_query.sql
+Замер сделан на прогретом кэше (три прогона перед снятием плана).
+
+                                                             QUERY PLAN                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=131.96..132.06 rows=40 width=25) (actual time=0.165..0.168 rows=46 loops=1)
+   Sort Key: value DESC
+   Sort Method: quicksort  Memory: 27kB
+   Buffers: shared hit=51
+   ->  Bitmap Heap Scan on quote q  (cost=4.60..130.89 rows=40 width=25) (actual time=0.020..0.129 rows=46 loops=1)
+         Recheck Cond: (trade_date = '2026-09-14'::date)
+         Heap Blocks: exact=46
+         Buffers: shared hit=48
+         ->  Bitmap Index Scan on quote_date_secid_idx  (cost=0.00..4.59 rows=40 width=0) (actual time=0.009..0.009 rows=46 loops=1)
+               Index Cond: (trade_date = '2026-09-14'::date)
+               Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=123
+ Planning Time: 0.457 ms
+ Execution Time: 0.209 ms
+(15 rows)
+

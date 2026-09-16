@@ -80,13 +80,21 @@ C1=$(mk_card "Динамика рынка: с дивидендами и без" 
  "with nedeli as (select index_id, date_trunc('week', trade_date)::date as nedelya, max(trade_date) as posledniy_den from core.index_quote where index_id in ('IMOEX','MCFTR') group by 1,2), tochki as (select n.index_id, n.nedelya, q.close from nedeli n join core.index_quote q on q.index_id=n.index_id and q.trade_date=n.posledniy_den) select nedelya as \"Дата\", case index_id when 'IMOEX' then 'Без дивидендов (IMOEX)' else 'С дивидендами (MCFTR)' end as \"Индекс\", round((close / first_value(close) over (partition by index_id order by nedelya) - 1) * 100, 1) as \"Доходность, %\" from tochki order by nedelya" \
  '{"graph.dimensions":["Дата","Индекс"],"graph.metrics":["Доходность, %"],"graph.y_axis.title_text":"Доходность с начала периода, %","graph.x_axis.title_text":""}')
 
-C2=$(mk_card "Топ-10 бумаг по доходности" "Цены скорректированы на дробления акций" "bar" \
+# Вертикальные бары, а не горизонтальные: row chart в Metabase схлопывает
+# всё после восьмой категории в синтетическую строку «Other», суммируя
+# значения. На топ-10 это давало несуществующую бумагу с суммой двух
+# последних. Настройками graph.max_categories не обходится.
+C2=$(mk_card "Топ-10 бумаг по доходности" \
+ "Период 03.01.2022 — 15.09.2026. Цены скорректированы на дробления акций. БСП — выброс: рост втрое сильнее следующей бумаги." "bar" \
  "select shortname as \"Бумага\", round((dohodnost_total*100)::numeric,1) as \"Доходность, %\" from marts.mv_security_stats order by dohodnost_total desc limit 10" \
- '{"graph.dimensions":["Бумага"],"graph.metrics":["Доходность, %"],"graph.y_axis.title_text":"Доходность за период, %","graph.x_axis.title_text":""}')
+ '{"graph.dimensions":["Бумага"],"graph.metrics":["Доходность, %"],"graph.y_axis.title_text":"Доходность за период, %","graph.x_axis.title_text":"","graph.show_values":true,"series_settings":{"Доходность, %":{"color":"#2a78d6"}}}')
 
-C3=$(mk_card "Доходность против волатильности" "Каждая точка — бумага, размер точки — медианный дневной оборот" "scatter" \
- "select round((volatilnost_god*100)::numeric,1) as \"Волатильность, % годовых\", round((dohodnost_total*100)::numeric,1) as \"Доходность, %\", shortname as \"Бумага\", round((mediana_oborota/1e6)::numeric,0) as \"Оборот, млн руб\" from marts.mv_security_stats where volatilnost_god is not null" \
- '{"graph.dimensions":["Волатильность, % годовых"],"graph.metrics":["Доходность, %"],"scatter.bubble":"Оборот, млн руб"}')
+# Без размера пузыря: он кодировал оборот, но легенды для размера Metabase
+# не рисует, поэтому читатель видел точки разного размера без объяснения.
+C3=$(mk_card "Доходность против волатильности" \
+ "Период 03.01.2022 — 15.09.2026. Каждая точка — бумага индекса МосБиржи." "scatter" \
+ "select round((volatilnost_god*100)::numeric,1) as \"Волатильность, % годовых\", round((dohodnost_total*100)::numeric,1) as \"Доходность, %\", shortname as \"Бумага\" from marts.mv_security_stats where volatilnost_god is not null" \
+ '{"graph.dimensions":["Волатильность, % годовых"],"graph.metrics":["Доходность, %"],"graph.x_axis.title_text":"Волатильность, % годовых","graph.y_axis.title_text":"Доходность за период, %","series_settings":{"Доходность, %":{"color":"#2a78d6"}}}')
 
 C4=$(mk_card "Беты к индексу МосБиржи" "Две независимые оценки беты: ковариационная и регрессионная" "table" \
  "select shortname as \"Бумага\", sector_name as \"Сектор\", round(beta_cov::numeric,3) as \"Бета (cov/var)\", round(beta_regr::numeric,3) as \"Бета (regr_slope)\", round(r2::numeric,3) as \"R²\", round((volatilnost_god*100)::numeric,1) as \"Волатильность, %\", round((max_prosadka*100)::numeric,1) as \"Макс. просадка, %\" from marts.mv_security_stats order by beta_cov desc" \
