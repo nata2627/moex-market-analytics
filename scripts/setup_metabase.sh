@@ -7,6 +7,9 @@
 # об этом и выходит. Повторный запуск не создаёт второй дашборд.
 set -euo pipefail
 
+# Учётные данные локального стенда. Metabase поднимается в контейнере на
+# localhost и наружу не смотрит, поэтому дефолты заданы прямо здесь.
+# Для другого пароля: MB_PASSWORD=... ./scripts/setup_metabase.sh
 MB=${MB_URL:-http://localhost:3000}
 EMAIL=${MB_EMAIL:-analyst@moex.local}
 PASSWORD=${MB_PASSWORD:-REDACTED}

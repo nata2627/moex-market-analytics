@@ -19,6 +19,11 @@ make dashboard                        # собрать дашборд в Metabas
 Дальше: дашборд на `http://localhost:3000/dashboard/2`, вход
 `analyst@moex.local` / `REDACTED`.
 
+Учётные данные — дефолты локального стенда: и PostgreSQL, и Metabase
+поднимаются в контейнерах на `localhost` и наружу не смотрят. Свои значения
+задаются через переменные окружения: `POSTGRES_PASSWORD` в `.env` для базы,
+`MB_PASSWORD` для Metabase.
+
 Остальные команды: `make checks` — проверки качества данных, `make psql` —
 консоль базы, `make refresh` — повторная загрузка с обновлением пересчитанных
 биржей строк, `make clean` — снести всё вместе с данными.
