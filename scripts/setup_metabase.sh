@@ -7,12 +7,36 @@
 # об этом и выходит. Повторный запуск не создаёт второй дашборд.
 set -euo pipefail
 
-# Учётные данные локального стенда. Metabase поднимается в контейнере на
-# localhost и наружу не смотрит, поэтому дефолты заданы прямо здесь.
-# Для другого пароля: MB_PASSWORD=... ./scripts/setup_metabase.sh
+# Учётные данные стенда. В репозитории их нет и быть не может: он
+# публичный, и записанный здесь пароль — это пароль, выложенный в
+# интернет, сколько бы раз он ни был «от локального контейнера».
+#
+# Но обещание «склонировал и запустил» ломать тоже не хочется, а
+# требовать пароль руками — значит его сломать. Поэтому пароль не
+# спрашивается, а заводится сам: при первой настройке генерируется
+# случайный и дописывается в .env, который не отслеживается. Дальше
+# скрипт читает его оттуда, и повторный запуск входит той же учёткой.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="$REPO/.env"
+if [ -f "$ENV_FILE" ]; then
+    set -a; . "$ENV_FILE"; set +a
+fi
+
 MB=${MB_URL:-http://localhost:3000}
 EMAIL=${MB_EMAIL:-analyst@moex.local}
-PASSWORD=${MB_PASSWORD:-REDACTED}
+
+if [ -z "${MB_PASSWORD:-}" ]; then
+    # Случайные знаки, а не слово: Metabase отвергает короткие и словарные
+    # пароли. Только буквы и цифры — пароль идёт и в .env, и в JSON, и
+    # экранирование было бы лишним способом отстрелить себе ногу.
+    # `|| true` против SIGPIPE: при set -o pipefail обрыв tr со стороны
+    # head уронил бы весь скрипт.
+    MB_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 28 || true)
+    printf '\n# Пароль Metabase, создан при первой настройке\nMB_PASSWORD=%s\n' \
+        "$MB_PASSWORD" >> "$ENV_FILE"
+    echo "Пароль Metabase создан и записан в .env"
+fi
+PASSWORD=$MB_PASSWORD
 
 echo "Жду, пока Metabase поднимется..."
 until [ "$(curl -s -o /dev/null -w '%{http_code}' "$MB/api/health")" = "200" ]; do sleep 3; done
@@ -45,11 +69,19 @@ auth=(-H "X-Metabase-Session: $SESSION")
 DB_ID=$(curl -s "${auth[@]}" "$MB/api/database" | jq -r '.data[] | select(.name=="MOEX") | .id' | head -1)
 if [ -z "$DB_ID" ]; then
     echo "Подключаю базу MOEX"
-    DB_ID=$(curl -s -X POST "$MB/api/database" "${auth[@]}" -H 'Content-Type: application/json' -d '{
-        "engine":"postgres","name":"MOEX",
-        "details":{"host":"postgres","port":5432,"dbname":"moex","user":"moex","password":"moex",
-                   "ssl":false,"schema-filters-type":"inclusion","schema-filters-patterns":"core,marts"},
-        "is_full_sync":true}' | jq -r .id)
+    # Учётка базы берётся из .env, а не зашивается. Раньше здесь стояло
+    # moex/moex строкой, и смена POSTGRES_PASSWORD молча ломала
+    # подключение: контейнер поднимался с новым паролем, а Metabase
+    # продолжал ходить со старым.
+    DB_ID=$(curl -s -X POST "$MB/api/database" "${auth[@]}" -H 'Content-Type: application/json' -d "{
+        \"engine\":\"postgres\",\"name\":\"MOEX\",
+        \"details\":{\"host\":\"postgres\",\"port\":5432,
+                   \"dbname\":\"${POSTGRES_DB:-moex}\",
+                   \"user\":\"${POSTGRES_USER:-moex}\",
+                   \"password\":\"${POSTGRES_PASSWORD:-moex}\",
+                   \"ssl\":false,\"schema-filters-type\":\"inclusion\",
+                   \"schema-filters-patterns\":\"core,marts\"},
+        \"is_full_sync\":true}" | jq -r .id)
     curl -s -X POST "${auth[@]}" "$MB/api/database/$DB_ID/sync_schema" > /dev/null
     echo "Жду синхронизации схемы..."
     until [ "$(curl -s "${auth[@]}" "$MB/api/database/$DB_ID/metadata" | jq '.tables | length')" -gt 5 ]; do sleep 3; done
@@ -112,4 +144,4 @@ curl -s -X PUT "$MB/api/dashboard/$DASH" "${auth[@]}" -H 'Content-Type: applicat
   ]}" > /dev/null
 
 echo "Готово. Дашборд: $MB/dashboard/$DASH"
-echo "Вход: $EMAIL / $PASSWORD"
+echo "Вход: $EMAIL, пароль в .env (MB_PASSWORD)"
